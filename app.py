@@ -398,6 +398,36 @@ def update_session():
 
 
 # ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    """Check Redis and Postgres connectivity."""
+    result = {"redis": "ok", "postgres": "ok"}
+
+    try:
+        redis_client.ping()
+    except Exception as e:
+        result["redis"] = f"error: {e}"
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        conn.close()
+    except Exception as e:
+        result["postgres"] = f"error: {e}"
+
+    healthy = result["redis"] == "ok" and result["postgres"] == "ok"
+    result["status"] = "healthy" if healthy else "unhealthy"
+    result["timestamp"] = datetime.now(timezone.utc).isoformat()
+
+    return jsonify(result), 200 if healthy else 503
+
+
+# ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
 
