@@ -74,6 +74,17 @@ def _caller_info(req):
 @app.route("/answer/", methods=["GET", "POST"])
 def answer_call():
     """Initial IVR greeting — plays the main menu and waits for a digit."""
+    caller, call_uuid = _caller_info(request)
+
+    # Create a Redis session for this caller
+    session_data = {
+        "step": "main_menu",
+        "call_uuid": call_uuid,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+    redis_client.setex(f"session:{caller}", SESSION_TTL, json.dumps(session_data))
+    app.logger.info(f"Session created for caller={caller}")
+
     response = plivo.xml.ResponseElement()
 
     get_input = plivo.xml.GetDigitsElement(
@@ -109,8 +120,15 @@ def handle_input():
 
     response = plivo.xml.ResponseElement()
 
+    # Update Redis session with the menu selection
+    key = f"session:{caller}"
+    raw = redis_client.get(key)
+    session_data = json.loads(raw) if raw else {}
+
     if digit == "1":
-        # Sub-menu for Sales
+        session_data["step"] = "sales_menu"
+        redis_client.setex(key, SESSION_TTL, json.dumps(session_data))
+
         get_input = plivo.xml.GetDigitsElement(
             action=f"{BASE_URL}/handle-sales-input/",
             method="POST",
@@ -131,6 +149,8 @@ def handle_input():
         )
 
     elif digit == "2":
+        session_data["step"] = "routed_support"
+        redis_client.setex(key, SESSION_TTL, json.dumps(session_data))
         log_call(caller, call_uuid, "Main > Support")
         response.add(
             plivo.xml.SpeakElement(
@@ -140,6 +160,8 @@ def handle_input():
         )
 
     elif digit == "3":
+        session_data["step"] = "routed_hours"
+        redis_client.setex(key, SESSION_TTL, json.dumps(session_data))
         log_call(caller, call_uuid, "Main > Hours")
         response.add(
             plivo.xml.SpeakElement(
@@ -150,6 +172,8 @@ def handle_input():
         )
 
     else:
+        session_data["step"] = "invalid_input"
+        redis_client.setex(key, SESSION_TTL, json.dumps(session_data))
         response.add(
             plivo.xml.SpeakElement("Invalid input. Please try again.")
         )
@@ -169,7 +193,13 @@ def handle_sales_input():
 
     response = plivo.xml.ResponseElement()
 
+    key = f"session:{caller}"
+    raw = redis_client.get(key)
+    session_data = json.loads(raw) if raw else {}
+
     if digit == "1":
+        session_data["step"] = "routed_sales_new"
+        redis_client.setex(key, SESSION_TTL, json.dumps(session_data))
         log_call(caller, call_uuid, "Main > Sales > New Customers")
         response.add(
             plivo.xml.SpeakElement(
@@ -178,6 +208,8 @@ def handle_sales_input():
         )
 
     elif digit == "2":
+        session_data["step"] = "routed_sales_existing"
+        redis_client.setex(key, SESSION_TTL, json.dumps(session_data))
         log_call(caller, call_uuid, "Main > Sales > Existing Customers")
         response.add(
             plivo.xml.SpeakElement(
@@ -186,10 +218,11 @@ def handle_sales_input():
         )
 
     else:
+        session_data["step"] = "invalid_input"
+        redis_client.setex(key, SESSION_TTL, json.dumps(session_data))
         response.add(
             plivo.xml.SpeakElement("Invalid input. Please try again.")
         )
-        # Send them back to the main menu
         response.add(
             plivo.xml.RedirectElement(f"{BASE_URL}/answer/")
         )
