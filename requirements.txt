@@ -1,0 +1,4 @@
+flask
+plivo
+python-dotenv
+psycopg2-binary
