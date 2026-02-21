@@ -13,7 +13,7 @@ load_dotenv()
 PLIVO_AUTH_ID = os.getenv("PLIVO_AUTH_ID")
 PLIVO_AUTH_TOKEN = os.getenv("PLIVO_AUTH_TOKEN")
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
-DATABASE_URL = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("NEON_POSTGRES_URL") or os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
 
 REDIS_URL = os.getenv("REDIS_URL")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
